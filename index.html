@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Quiz Maker</title>
+    
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css" />
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #eef2f3; padding: 20px; }
+        .card { background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
+        h2 { text-align: center; color: #2c3e50; }
+        label { font-weight: bold; display: block; margin-top: 1.2rem; color: #34495e; }
+        input { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
+        .checkbox-group { margin-top: 1rem; display: flex; align-items: center; gap: 10px; }
+        .checkbox-group input { width: auto; }
+        button { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 15px; width: 100%; border-radius: 8px; font-size: 16px; cursor: pointer; margin-top: 1.5rem; }
+        
+        /* Progress Bar Styles */
+        .progress-container { width: 100%; background-color: #ddd; border-radius: 20px; margin-top: 1.5rem; display: none; }
+        .progress-bar { width: 0%; height: 10px; background-color: #4caf50; border-radius: 20px; transition: width 0.3s; }
+        #status { text-align: center; font-size: 14px; margin-top: 5px; color: #555; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>🎓 Pro Quiz Maker</h2>
+        
+        <label>Upload CSV File(s)</label>
+        <input type="file" id="csv-upload" accept=".csv" multiple>
+        
+        <label>Number of Questions</label>
+        <input type="number" id="num-q" value="10">
+
+        <div class="checkbox-group">
+            <input type="checkbox" id="shuffle-opts" checked>
+            <span>Shuffle A, B, C, D Options</span>
+        </div>
+
+        <button id="gen-btn" py-click="generate_quiz">Generate Quiz</button>
+        
+        <div class="progress-container" id="p-container">
+            <div class="progress-bar" id="p-bar"></div>
+        </div>
+        <div id="status">Ready</div>
+    </div>
+
+    <section class="pyscript">
+        <script type="py" config='{"packages":["pandas", "python-docx"]}'>
+            import pandas as pd
+            from docx import Document
+            from docx.enum.section import WD_SECTION
+            from docx.oxml import OxmlElement, ns
+            from js import document, Uint8Array, window, Blob
+            import io, csv, random
+
+            def set_columns(section, num_cols):
+                sectPr = section._sectPr
+                cols = sectPr.xpath('./w:cols')[0]
+                cols.set(ns.qn('w:num'), str(num_cols))
+                cols.set(ns.qn('w:space'), '720') # 0.5 inch space
+
+            async def generate_quiz(event):
+                status = document.getElementById("status")
+                p_bar = document.getElementById("p-bar")
+                p_cont = document.getElementById("p-container")
+                
+                file_list = document.getElementById("csv-upload").files
+                if len(file_list) == 0:
+                    status.innerText = "❌ No files!"
+                    return
+
+                p_cont.style.display = "block"
+                p_bar.style.width = "20%"
+                status.innerText = "Loading Files..."
+
+                try:
+                    all_dfs = []
+                    for i in range(len(file_list)):
+                        file = file_list.item(i)
+                        array_buffer = await file.arrayBuffer()
+                        df = pd.read_csv(io.BytesIO(array_buffer.to_py()))
+                        rename_map = {df.columns[j]: n for j, n in enumerate(['Question', 'A', 'B', 'C', 'D', 'Answer'])}
+                        all_dfs.append(df.rename(columns=rename_map))
+
+                    final_df = pd.concat(all_dfs).drop_duplicates(subset=['Question']).dropna()
+                    p_bar.style.width = "50%"
+                    status.innerText = "Shuffling..."
+
+                    num = int(document.getElementById("num-q").value)
+                    selected = final_df.sample(n=min(num, len(final_df))).to_dict('records')
+                    shuffle_needed = document.getElementById("shuffle-opts").checked
+
+                    # Create Doc
+                    doc = Document()
+                    section = doc.sections[0]
+                    set_columns(section, 2) # 2 COLUMN MODE
+                    
+                    doc.add_heading('Quiz Paper', 0)
+                    
+                    final_keys = []
+
+                    for i, q in enumerate(selected, 1):
+                        opts = [('A', q['A']), ('B', q['B']), ('C', q['C']), ('D', q['D'])]
+                        correct_val = q[q['Answer'].strip()] if q['Answer'] in ['A','B','C','D'] else q['Answer']
+                        
+                        if shuffle_needed:
+                            random.shuffle(opts)
+                        
+                        p = doc.add_paragraph()
+                        p.add_run(f"{i}. {q['Question']}").bold = True
+                        
+                        new_correct_letter = ""
+                        for idx, (original_letter, text) in enumerate(opts):
+                            letter = chr(65 + idx) # A, B, C, D
+                            doc.add_paragraph(f"{letter}) {text}")
+                            if text == correct_val:
+                                new_correct_letter = letter
+                        
+                        final_keys.append((i, new_correct_letter))
+
+                    p_bar.style.width = "80%"
+                    status.innerText = "Finalizing..."
+
+                    # Add Keys to Word (New Page, 1 Column)
+                    new_section = doc.add_section(WD_SECTION.NEW_PAGE)
+                    set_columns(new_section, 1)
+                    doc.add_heading('Answer Key', level=1)
+                    for q_no, key in final_keys:
+                        doc.add_paragraph(f"Q{q_no}. {key}")
+
+                    # Downloads
+                    doc_io = io.BytesIO()
+                    doc.save(doc_io)
+                    
+                    # CSV Key
+                    csv_io = io.StringIO()
+                    cw = csv.writer(csv_io, quoting=csv.QUOTE_ALL)
+                    cw.writerow(["Q No", "KEY"])
+                    for q_no, key in final_keys:
+                        cw.writerow([str(q_no), key])
+
+                    # Trigger JavaScript Downloads
+                    def trigger(content, name, mime):
+                        blob = Blob.new([Uint8Array.new(content)], {type: mime})
+                        url = window.URL.createObjectURL(blob)
+                        l = document.createElement("a")
+                        l.href = url
+                        l.download = name
+                        l.click()
+
+                    trigger(doc_io.getvalue(), "quiz.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                    trigger(csv_io.getvalue().encode('utf-8'), "answer_key.csv", "text/csv")
+
+                    p_bar.style.width = "100%"
+                    status.innerText = "✅ Done!"
+                except Exception as e:
+                    status.innerText = f"❌ Error: {str(e)}"
+        </script>
+    </section>
+</body>
+</html>
