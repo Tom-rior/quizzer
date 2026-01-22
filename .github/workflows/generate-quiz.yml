@@ -1,0 +1,106 @@
+name: Generate Quiz
+
+on:
+  workflow_dispatch:
+    inputs:
+      num_questions:
+        description: 'How many questions? (1–200)'
+        required: true
+        default: '30'
+      negative_marking:
+        description: 'Enable negative marking? (yes / no)'
+        required: false
+        default: 'no'
+      csv_content:
+        description: 'Paste CSV content here (Question,A,B,C,D,Answer format)'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas
+
+      - name: Generate quiz files
+        env:
+          NUM_Q: ${{ inputs.num_questions }}
+          NEGATIVE: ${{ inputs.negative_marking }}
+          CSV_DATA: ${{ inputs.csv_content }}
+        run: |
+          # Save pasted CSV to file
+          echo "$CSV_DATA" > questions.csv
+
+          python - << 'EOF'
+          import pandas as pd
+          import random
+          import os
+
+          df = pd.read_csv("questions.csv", header=None,
+                           names=['Question','A','B','C','D','Answer'],
+                           on_bad_lines='skip').dropna()
+
+          df = df.drop_duplicates(subset=['Question'])
+
+          n = min(int(os.environ['NUM_Q']), len(df))
+          negative = os.environ['NEGATIVE'].lower() in ['yes','y','true','1']
+
+          questions = df.to_dict('records')
+          random.shuffle(questions)
+          selected = questions[:n]
+
+          # Answer key CSV
+          with open('answer_key.csv', 'w', encoding='utf-8') as f:
+              f.write("Q No,KEY\n")
+              for i, q in enumerate(selected, 1):
+                  f.write(f"{i},{q['Answer'].strip()}\n")
+
+          # Printable HTML quiz
+          html = '''<!DOCTYPE html>
+          <html>
+          <head><meta charset="utf-8"><title>Quiz</title>
+          <style>body{font-family:Arial;margin:40px;line-height:1.5;}
+          h1{text-align:center;}.q{margin:1.6em 0;font-weight:bold;}
+          .opts{margin-left:2em;}.opts p{margin:0.5em 0;}</style>
+          </head><body>
+          <h1>Quiz</h1>
+          ''' + (negative * '<p style="text-align:center;color:#555;">Marking: +1 correct, –⅓ incorrect, 0 unattempted</p>') + '''
+          <hr>
+          ''' + ''.join(
+              f'<div class="q">Q{i+1}. {q["Question"]}</div>'
+              f'<div class="opts">'
+              f'<p>A. {q["A"]}</p><p>B. {q["B"]}</p><p>C. {q["C"]}</p><p>D. {q["D"]}</p>'
+              f'</div>'
+              for i,q in enumerate(selected,1)
+          ) + '''
+          <hr>
+          </body></html>'''
+
+          with open('quiz.html', 'w', encoding='utf-8') as f:
+              f.write(html)
+
+          print(f"Generated quiz with {len(selected)} questions")
+          EOF
+
+      - name: Upload quiz files
+        uses: actions/upload-artifact@v4
+        with:
+          name: quiz-files
+          path: |
+            answer_key.csv
+            quiz.html
+          retention-days: 7
+
+      - name: Show summary
+        run: echo "Quiz ready! Download artifacts from the run summary."
