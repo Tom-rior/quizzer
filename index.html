@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Quiz Generator (via GitHub Actions)</title>
+  <style>
+    body{font-family:system-ui,sans-serif; max-width:860px; margin:2rem auto; padding:1rem; background:#f8f9fa; color:#212529;}
+    h1{text-align:center; color:#0d6efd;}
+    .card{background:white; border-radius:10px; box-shadow:0 3px 10px #0000001a; padding:2rem; margin:1.5rem 0;}
+    label{display:block; margin:1.4rem 0 0.5rem; font-weight:500;}
+    input, button{padding:0.8rem 1.2rem; border-radius:6px; border:1px solid #ced4da; font-size:1rem;}
+    button{background:#0d6efd; color:white; border:none; cursor:pointer; font-weight:600; margin-top:1.5rem; width:100%;}
+    button:hover{background:#0b5ed7;}
+    #status{margin-top:1.5rem; color:#6c757d;}
+    .instructions{color:#6c757d; line-height:1.6;}
+    .warning{background:#fff3cd; border:1px solid #ffeeba; padding:1rem; border-radius:6px; margin:1.5rem 0;}
+  </style>
+</head>
+<body>
+
+  <h1>Quiz Generator</h1>
+
+  <div class="card">
+    <form id="quizForm">
+      <label for="csvFiles">Upload CSV file(s) <small>(columns: Question,A,B,C,D,Answer)</small></label>
+      <input type="file" id="csvFiles" accept=".csv" multiple required />
+
+      <label for="numQuestions">Number of questions to include</label>
+      <input type="number" id="numQuestions" min="1" max="200" value="30" required />
+
+      <label>
+        <input type="checkbox" id="negative" /> Enable negative marking (–⅓ per wrong answer)
+      </label>
+
+      <button type="submit">Prepare Quiz (see instructions below)</button>
+    </form>
+
+    <div id="status"></div>
+  </div>
+
+  <div class="card instructions">
+    <h3>How to generate your quiz (2026 method)</h3>
+    <p>This page helps you prepare inputs — the actual generation runs in <strong>GitHub Actions</strong>.</p>
+    
+    <ol>
+      <li>Fill the form above and click the button</li>
+      <li>Go to the <strong>Actions</strong> tab of this repository → select workflow "<strong>Generate Quiz</strong>"</li>
+      <li>Click <strong>Run workflow</strong> ▼</li>
+      <li>Paste/upload your values (number of questions, negative marking, CSV content)</li>
+      <li>Run → wait 10–40 seconds → download artifacts (answer_key.csv + quiz.html)</li>
+    </ol>
+
+    <div class="warning">
+      <strong>Security note:</strong> We <strong>do not</strong> send your CSV files or PAT token from this page.<br>
+      For full automation (direct download from form) you would need a server (Vercel/Netlify/Cloudflare) + secret token — not possible securely on pure GitHub Pages.
+    </div>
+  </div>
+
+  <script>
+    // Optional: basic client-side CSV preview / copy helper
+    document.getElementById('quizForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const status = document.getElementById('status');
+      status.innerHTML = 'Files selected. Now go to the <strong>Actions</strong> tab → "Generate Quiz" → Run workflow';
+
+      // Future: if you host elsewhere → fetch('/api/trigger', {method:'POST', body: formData})
+    });
+  </script>
+
+</body>
+</html>
