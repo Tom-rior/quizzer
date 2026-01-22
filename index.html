@@ -3,78 +3,116 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quiz Maker</title>
+    <title>Quiz Maker Pro</title>
+    
     <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css" />
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+
     <style>
-        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
-        .container { max-width: 600px; margin: auto; border: 1px solid #ccc; padding: 20px; border-radius: 10px; }
-        button { background: #007bff; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 5px; }
-        input { margin-bottom: 10px; display: block; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); max-width: 450px; width: 100%; }
+        h2 { color: #333; text-align: center; margin-bottom: 1.5rem; }
+        label { font-weight: bold; display: block; margin-top: 1rem; color: #555; }
+        input[type="file"], input[type="number"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        button { background-color: #28a745; color: white; border: none; padding: 12px; width: 100%; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 1.5rem; transition: background 0.3s; }
+        button:hover { background-color: #218838; }
+        #output { margin-top: 1rem; text-align: center; font-weight: bold; color: #007bff; }
+        .footer { font-size: 12px; text-align: center; margin-top: 1rem; color: #888; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>📝 Quiz Maker (No Streamlit)</h2>
-        <p>Step 1: Upload your CSV</p>
+
+    <div class="card">
+        <h2>📝 Quiz Maker</h2>
+        
+        <label>1. Upload CSV File</label>
         <input type="file" id="csv-upload" accept=".csv">
         
-        <p>Step 2: Number of questions</p>
-        <input type="number" id="num-q" value="5">
+        <label>2. Number of Questions</label>
+        <input type="number" id="num-q" value="5" min="1">
 
-        <button id="gen-btn" py-click="generate_quiz">Generate & Download Quiz</button>
-        <div id="output"></div>
+        <button id="gen-btn" py-click="generate_quiz">🚀 Generate & Download</button>
+        
+        <div id="output">Ready to build!</div>
+        <div class="footer">Your file stays private. No data is sent to a server.</div>
     </div>
 
     <section class="pyscript">
         <script type="py" config='{"packages":["pandas", "python-docx"]}'>
             import pandas as pd
             from docx import Document
-            from js import document, Uint8Array, File, window
+            from js import document, Uint8Array, window
             import io
 
             async def generate_quiz(event):
+                output_div = document.getElementById("output")
+                output_div.innerText = "⏳ Processing... please wait."
+                
                 file_list = document.getElementById("csv-upload").files
                 if len(file_list) == 0:
-                    document.getElementById("output").innerText = "❌ Please upload a file first!"
+                    output_div.innerText = "❌ Please upload a CSV first!"
                     return
 
-                # Read File
-                file = file_list.item(0)
-                array_buffer = await file.arrayBuffer()
-                data = array_buffer.to_py()
-                df = pd.read_csv(io.BytesIO(data))
+                try:
+                    # 1. Read the CSV from the browser
+                    file = file_list.item(0)
+                    array_buffer = await file.arrayBuffer()
+                    data = array_buffer.to_py()
+                    df = pd.read_csv(io.BytesIO(data))
 
-                # Process
-                num = int(document.getElementById("num-q").value)
-                selected = df.sample(n=min(num, len(df))).to_dict('records')
+                    # 2. Fix Column Names
+                    rename_map = {
+                        df.columns[0]: 'Question',
+                        df.columns[1]: 'A',
+                        df.columns[2]: 'B',
+                        df.columns[3]: 'C',
+                        df.columns[4]: 'D',
+                        df.columns[5]: 'Answer'
+                    }
+                    df = df.rename(columns=rename_map)
 
-                # Create Word Doc
-                doc = Document()
-                doc.add_heading('Quiz', 0)
-                for i, q in enumerate(selected, 1):
-                    p = doc.add_paragraph()
-                    p.add_run(f"Q{i}. {q.iloc[0]}").bold = True
-                    doc.add_paragraph(f"A. {q.iloc[1]}")
-                    doc.add_paragraph(f"B. {q.iloc[2]}")
-                    doc.add_paragraph(f"C. {q.iloc[3]}")
-                    doc.add_paragraph(f"D. {q.iloc[4]}")
+                    # 3. Select Random Questions
+                    num = int(document.getElementById("num-q").value)
+                    selected = df.sample(n=min(num, len(df))).to_dict('records')
 
-                # Download Trigger
-                out_io = io.BytesIO()
-                doc.save(out_io)
-                content = Uint8Array.new(out_io.getvalue())
+                    # 4. Create the Word Document
+                    doc = Document()
+                    doc.add_heading('Generated Quiz', 0)
+                    
+                    for i, q in enumerate(selected, 1):
+                        p = doc.add_paragraph()
+                        run = p.add_run(f"Q{i}. {q['Question']}")
+                        run.bold = True
+                        doc.add_paragraph(f"A) {q['A']}")
+                        doc.add_paragraph(f"B) {q['B']}")
+                        doc.add_paragraph(f"C) {q['C']}")
+                        doc.add_paragraph(f"D) {q['D']}")
+                        doc.add_paragraph() # Spacer
+
+                    # 5. Add Answer Key
+                    doc.add_page_break()
+                    doc.add_heading('Answer Key', level=1)
+                    for i, q in enumerate(selected, 1):
+                        doc.add_paragraph(f"Q{i}. {q['Answer']}")
+
+                    # 6. Export for Download
+                    out_io = io.BytesIO()
+                    doc.save(out_io)
+                    content = Uint8Array.new(out_io.getvalue())
+                    
+                    blob = window.Blob.new([content], {type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"})
+                    url = window.URL.createObjectURL(blob)
+                    link = document.createElement("a")
+                    link.href = url
+                    link.download = "quiz.docx"
+                    link.click()
+                    
+                    output_div.innerText = "✅ Success! File downloaded."
                 
-                # JavaScript download trigger
-                blob = window.Blob.new([content], {type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"})
-                url = window.URL.createObjectURL(blob)
-                link = document.createElement("a")
-                link.href = url
-                link.download = "quiz.docx"
-                link.click()
-                
-                document.getElementById("output").innerText = "✅ Done! Check your downloads."
+                except Exception as e:
+                    output_div.innerText = f"❌ Error: {str(e)}"
         </script>
     </section>
+
 </body>
 </html>
