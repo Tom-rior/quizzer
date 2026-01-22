@@ -3,69 +3,146 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Quiz Generator (via GitHub Actions)</title>
+  <title>Quiz Maker – CSV to Quiz (Offline)</title>
   <style>
-    body{font-family:system-ui,sans-serif; max-width:860px; margin:2rem auto; padding:1rem; background:#f8f9fa; color:#212529;}
-    h1{text-align:center; color:#0d6efd;}
-    .card{background:white; border-radius:10px; box-shadow:0 3px 10px #0000001a; padding:2rem; margin:1.5rem 0;}
-    label{display:block; margin:1.4rem 0 0.5rem; font-weight:500;}
-    input, button{padding:0.8rem 1.2rem; border-radius:6px; border:1px solid #ced4da; font-size:1rem;}
-    button{background:#0d6efd; color:white; border:none; cursor:pointer; font-weight:600; margin-top:1.5rem; width:100%;}
-    button:hover{background:#0b5ed7;}
-    #status{margin-top:1.5rem; color:#6c757d;}
-    .instructions{color:#6c757d; line-height:1.6;}
-    .warning{background:#fff3cd; border:1px solid #ffeeba; padding:1rem; border-radius:6px; margin:1.5rem 0;}
+    :root { --primary: #2563eb; --success: #10b981; --bg: #f9fafb; --card: white; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: #1f2937; margin: 0; padding: 2rem; line-height: 1.6; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { text-align: center; color: var(--primary); margin-bottom: 2rem; }
+    .card { background: var(--card); border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 2rem; margin-bottom: 2rem; }
+    label { display: block; font-weight: 500; margin: 1.2rem 0 0.4rem; }
+    input, button { padding: 0.9rem 1.3rem; border-radius: 8px; border: 1px solid #d1d5db; font-size: 1rem; }
+    button { background: var(--primary); color: white; border: none; cursor: pointer; font-weight: 600; width: 100%; margin-top: 1.5rem; }
+    button:hover { background: #1d4ed8; }
+    #status { margin: 1.5rem 0; color: #4b5563; min-height: 1.5em; }
+    .downloads { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1.5rem; }
+    .btn { display: inline-block; background: var(--success); color: white; padding: 0.9rem 1.5rem; border-radius: 8px; text-decoration: none; font-weight: 600; }
+    .btn:hover { background: #059669; }
+    .instructions { background: #fefce8; border: 1px solid #fef08a; padding: 1rem; border-radius: 8px; margin-top: 2rem; }
   </style>
 </head>
 <body>
 
-  <h1>Quiz Generator</h1>
+  <div class="container">
+    <h1>Quiz Maker</h1>
 
-  <div class="card">
-    <form id="quizForm">
-      <label for="csvFiles">Upload CSV file(s) <small>(columns: Question,A,B,C,D,Answer)</small></label>
-      <input type="file" id="csvFiles" accept=".csv" multiple required />
+    <div class="card">
+      <form id="form">
+        <label for="csv">Upload CSV file(s) <small>(Question,A,B,C,D,Answer – one or multiple files)</small></label>
+        <input type="file" id="csv" accept=".csv" multiple required />
 
-      <label for="numQuestions">Number of questions to include</label>
-      <input type="number" id="numQuestions" min="1" max="200" value="30" required />
+        <label for="count">How many questions?</label>
+        <input type="number" id="count" min="1" value="25" required />
 
-      <label>
-        <input type="checkbox" id="negative" /> Enable negative marking (–⅓ per wrong answer)
-      </label>
+        <label>
+          <input type="checkbox" id="negative" checked /> Enable negative marking (–1/3 per wrong)
+        </label>
 
-      <button type="submit">Prepare Quiz (see instructions below)</button>
-    </form>
+        <button type="submit">Generate Quiz Files</button>
+      </form>
 
-    <div id="status"></div>
-  </div>
+      <div id="status"></div>
 
-  <div class="card instructions">
-    <h3>How to generate your quiz (2026 method)</h3>
-    <p>This page helps you prepare inputs — the actual generation runs in <strong>GitHub Actions</strong>.</p>
-    
-    <ol>
-      <li>Fill the form above and click the button</li>
-      <li>Go to the <strong>Actions</strong> tab of this repository → select workflow "<strong>Generate Quiz</strong>"</li>
-      <li>Click <strong>Run workflow</strong> ▼</li>
-      <li>Paste/upload your values (number of questions, negative marking, CSV content)</li>
-      <li>Run → wait 10–40 seconds → download artifacts (answer_key.csv + quiz.html)</li>
-    </ol>
+      <div class="downloads" id="downloads" style="display:none;">
+        <a id="dl-key" class="btn">Download answer_key.csv</a>
+        <a id="dl-quiz" class="btn">Download quiz.html (open & print to PDF)</a>
+      </div>
+    </div>
 
-    <div class="warning">
-      <strong>Security note:</strong> We <strong>do not</strong> send your CSV files or PAT token from this page.<br>
-      For full automation (direct download from form) you would need a server (Vercel/Netlify/Cloudflare) + secret token — not possible securely on pure GitHub Pages.
+    <div class="card instructions">
+      <strong>Want server-side generation?</strong><br>
+      Go to repo → <strong>Actions</strong> tab → <strong>Generate Quiz (Manual)</strong> → Run workflow → paste CSV content + settings.
     </div>
   </div>
 
   <script>
-    // Optional: basic client-side CSV preview / copy helper
-    document.getElementById('quizForm').addEventListener('submit', e => {
-      e.preventDefault();
-      const status = document.getElementById('status');
-      status.innerHTML = 'Files selected. Now go to the <strong>Actions</strong> tab → "Generate Quiz" → Run workflow';
+    const form = document.getElementById('form');
+    const status = document.getElementById('status');
+    const downloads = document.getElementById('downloads');
+    const dlKey = document.getElementById('dl-key');
+    const dlQuiz = document.getElementById('dl-quiz');
 
-      // Future: if you host elsewhere → fetch('/api/trigger', {method:'POST', body: formData})
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      status.textContent = 'Reading files...';
+
+      const files = document.getElementById('csv').files;
+      const num = parseInt(document.getElementById('count').value, 10) || 25;
+      const negative = document.getElementById('negative').checked;
+
+      let all = [];
+
+      for (const file of files) {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).slice(1); // skip header if any
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const [q, a, b, c, d, ans] = line.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+          if (q && ans) all.push({q, a, b, c, d, ans: ans.toUpperCase()});
+        }
+      }
+
+      // Deduplicate & shuffle
+      all = [...new Map(all.map(item => [item.q, item])).values()];
+      all.sort(() => Math.random() - 0.5);
+      const selected = all.slice(0, Math.min(num, all.length));
+
+      if (selected.length === 0) {
+        status.textContent = 'No valid questions found.';
+        return;
+      }
+
+      status.textContent = `Generated ${selected.length} questions!`;
+
+      // Answer key CSV
+      let csv = 'Q No,KEY\n';
+      selected.forEach((q, i) => csv += `${i+1},${q.ans}\n`);
+      const keyBlob = new Blob([csv], {type: 'text/csv'});
+      dlKey.href = URL.createObjectURL(keyBlob);
+      dlKey.download = 'answer_key.csv';
+
+      // Printable HTML
+      let html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Quiz – ${new Date().toLocaleDateString()}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.5; max-width: 800px; }
+    h1 { text-align: center; }
+    .marking { text-align: center; color: #555; font-size: 0.95em; margin-bottom: 2rem; }
+    .q { font-weight: bold; margin: 1.8em 0 0.6em; }
+    .o { margin-left: 1.8em; margin-bottom: 0.4em; }
+    @media print { .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <h1>Quiz</h1>
+  ${negative ? '<p class="marking">Marking: +1 correct, –⅓ incorrect, 0 unattempted</p>' : ''}
+  ${selected.map((q, i) => `
+    <div class="q">Q${i+1}. ${escape(q.q)}</div>
+    <div class="o">A. ${escape(q.a)}</div>
+    <div class="o">B. ${escape(q.b)}</div>
+    <div class="o">C. ${escape(q.c)}</div>
+    <div class="o">D. ${escape(q.d)}</div>
+  `).join('')}
+  <div class="no-print" style="margin-top:4rem;">
+    <hr><h2>Answer Key (teacher only)</h2>
+    ${selected.map((q, i) => `<p>Q${i+1}: ${q.ans}</p>`).join('')}
+  </div>
+</body>
+</html>`;
+
+      const quizBlob = new Blob([html], {type: 'text/html'});
+      dlQuiz.href = URL.createObjectURL(quizBlob);
+      dlQuiz.download = 'quiz.html';
+
+      downloads.style.display = 'flex';
     });
+
+    function escape(s) {
+      return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]);
+    }
   </script>
 
 </body>
